@@ -5,3 +5,8 @@
 -keep class io.flutter.view.**  { *; }
 -keep class io.flutter.**  { *; }
 -keep class io.flutter.plugins.**  { *; }
+
+# Google Play Core
+-dontwarn com.google.android.play.core.**
+-keep class com.google.android.play.core.** { *; }
+

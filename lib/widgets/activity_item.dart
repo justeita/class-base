@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:namer_app/auth_manager.dart';
 import 'package:namer_app/theme/app_theme.dart';
 import 'package:namer_app/schedule_detail_dialog.dart';
 import 'package:namer_app/services/schedule_service.dart';
 
 class ActivityItem extends StatelessWidget {
   final Map<String, dynamic> scheduleItem;
+  final AppTheme theme;
 
   const ActivityItem({
     super.key,
     required this.scheduleItem,
+    required this.theme,
   });
 
   @override
   Widget build(BuildContext context) {
-    final auth = AuthManager();
-    final appTheme = AppTheme.getTheme(auth.currentTheme, gender: auth.gender);
+    final appTheme = theme;
     final title = scheduleItem['subject'].toString();
     final teacherName = scheduleItem['teacher']?.toString() ?? '';
     final hasTeacher = teacherName.isNotEmpty && teacherName != '-';
@@ -24,7 +24,7 @@ class ActivityItem extends StatelessWidget {
         ? '${scheduleItem['start_time']} - ${scheduleItem['end_time']} • $teacherName'
         : '${scheduleItem['start_time']} - ${scheduleItem['end_time']}';
         
-    final icon = ScheduleService.getIconForSubject(title);
+    final icon = ScheduleService.getIconForSubject(title, dbIcon: scheduleItem['icon']);
     final color = ScheduleService.getColorForSubject(title, appTheme);
     final heroTag = 'activity_home_${scheduleItem['id'] ?? scheduleItem.hashCode}';
 

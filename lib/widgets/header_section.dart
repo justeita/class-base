@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:namer_app/auth_manager.dart';
 import 'package:namer_app/theme/app_theme.dart';
-import 'package:namer_app/profile_screen.dart';
 
 class HeaderSection extends StatelessWidget {
   const HeaderSection({super.key});
@@ -58,11 +57,11 @@ class HeaderSection extends StatelessWidget {
             ),
             InkWell(
               onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => const ProfileScreen()),
-                );
+                // Navigator.push(
+                //   context,
+                //   MaterialPageRoute(
+                //       builder: (context) => const ProfileScreen()),
+                // );
               },
               child: Container(
                 width: 50,
@@ -74,7 +73,7 @@ class HeaderSection extends StatelessWidget {
                       ? null 
                       : (appTheme.isBrutalist ? BorderRadius.zero : BorderRadius.circular(8)),
                 ),
-                child: Icon(Icons.person, color: appTheme.onSurface),
+                child: Icon(Icons.home, color: appTheme.onSurface),
               ),
             ),
           ],

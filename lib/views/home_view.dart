@@ -204,6 +204,7 @@ class _HomeViewState extends State<HomeView> {
                                       subtitle: subtitle,
                                       icon: Icons.assignment_outlined,
                                       index: '0${index + 1}',
+                                      theme: appTheme,
                                     ),
                                   ),
                                 ),
@@ -235,10 +236,43 @@ class _HomeViewState extends State<HomeView> {
                       }
                       
                       final allSchedule = snapshot.data ?? [];
+                      
                       final schedule = allSchedule.where((item) {
+                        // Filter by search query
                         final subject = (item['subject'] ?? '').toString().toLowerCase();
                         final teacher = (item['teacher'] ?? '').toString().toLowerCase();
-                        return subject.contains(_searchQuery) || teacher.contains(_searchQuery);
+                        
+                        // Filter non-lessons (Dashboard only shows lessons)
+                        final isLesson = teacher.isNotEmpty && teacher != '-' && 
+                            !subject.contains('istirahat') && 
+                            !subject.contains('break') &&
+                            !subject.contains('sholat') &&
+                            !subject.contains('prayer') &&
+                            !subject.contains('upacara') &&
+                            !subject.contains('ceremony');
+                            
+                        if (!isLesson) return false;
+
+                        final matchesSearch = subject.contains(_searchQuery) || teacher.contains(_searchQuery);
+                        
+                        if (!matchesSearch) return false;
+
+                        // Filter by time (only show current and future) if showing today's schedule
+                        if (!isTomorrow) {
+                          try {
+                            final endTimeStr = item['end_time'] as String;
+                            final parts = endTimeStr.split(':');
+                            final endMinutes = int.parse(parts[0]) * 60 + int.parse(parts[1]);
+                            final nowTime = TimeOfDay.now();
+                            final nowMinutes = nowTime.hour * 60 + nowTime.minute;
+                            
+                            if (endMinutes <= nowMinutes) return false;
+                          } catch (e) {
+                            // If parsing fails, keep it safe
+                          }
+                        }
+                        
+                        return true;
                       }).toList();
 
                       if (schedule.isEmpty) {
@@ -271,6 +305,7 @@ class _HomeViewState extends State<HomeView> {
                           padding: const EdgeInsets.only(bottom: 16),
                           child: ActivityItem(
                             scheduleItem: item,
+                            theme: appTheme,
                           ),
                         )).toList(),
                       );

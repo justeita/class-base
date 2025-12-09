@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:namer_app/auth_manager.dart';
 import 'package:namer_app/theme/app_theme.dart';
 
 class FeaturedCard extends StatelessWidget {
@@ -8,6 +7,7 @@ class FeaturedCard extends StatelessWidget {
   final String subtitle;
   final IconData icon;
   final String index;
+  final AppTheme theme;
 
   const FeaturedCard({
     super.key,
@@ -16,12 +16,12 @@ class FeaturedCard extends StatelessWidget {
     required this.subtitle,
     required this.icon,
     required this.index,
+    required this.theme,
   });
 
   @override
   Widget build(BuildContext context) {
-    final auth = AuthManager();
-    final appTheme = AppTheme.getTheme(auth.currentTheme, gender: auth.gender);
+    final appTheme = theme;
 
     return Container(
       width: 160,
@@ -141,6 +141,7 @@ class FeatureCard extends StatelessWidget {
   final String desc;
   final IconData icon;
   final Color color;
+  final AppTheme theme;
 
   const FeatureCard({
     super.key,
@@ -148,12 +149,12 @@ class FeatureCard extends StatelessWidget {
     required this.desc,
     required this.icon,
     required this.color,
+    required this.theme,
   });
 
   @override
   Widget build(BuildContext context) {
-    final auth = AuthManager();
-    final appTheme = AppTheme.getTheme(auth.currentTheme, gender: auth.gender);
+    final appTheme = theme;
     
     return Container(
       width: 200,

@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
 
 class GridPainter extends CustomPainter {
+  static final Paint _paint = Paint()
+    ..color = const Color(0xFF222222)
+    ..strokeWidth = 1;
+
   const GridPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFF222222)
-      ..strokeWidth = 1;
-
     const double spacing = 40;
 
     for (double i = 0; i < size.width; i += spacing) {
-      canvas.drawLine(Offset(i, 0), Offset(i, size.height), paint);
+      canvas.drawLine(Offset(i, 0), Offset(i, size.height), _paint);
     }
 
     for (double i = 0; i < size.height; i += spacing) {
-      canvas.drawLine(Offset(0, i), Offset(size.width, i), paint);
+      canvas.drawLine(Offset(0, i), Offset(size.width, i), _paint);
     }
   }
 
@@ -25,33 +25,33 @@ class GridPainter extends CustomPainter {
 }
 
 class CutePainter extends CustomPainter {
+  static final Paint _mainPaint = Paint()..style = PaintingStyle.fill;
+  static final Paint _highlightPaint = Paint()
+    ..color = Colors.white.withValues(alpha: 0.4)
+    ..style = PaintingStyle.fill;
+  static final Paint _borderPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1.5;
+
   const CutePainter();
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..style = PaintingStyle.fill;
-
     // Helper to draw a bubble
     void drawBubble(double x, double y, double radius, Color color) {
       // Main body
-      paint.color = color.withValues(alpha: 0.15);
-      canvas.drawCircle(Offset(x, y), radius, paint);
+      _mainPaint.color = color.withValues(alpha: 0.15);
+      canvas.drawCircle(Offset(x, y), radius, _mainPaint);
       
       // Highlight (reflection)
-      final highlightPaint = Paint()
-        ..color = Colors.white.withValues(alpha: 0.4)
-        ..style = PaintingStyle.fill;
       canvas.drawOval(
         Rect.fromLTWH(x - radius * 0.5, y - radius * 0.6, radius * 0.3, radius * 0.2), 
-        highlightPaint
+        _highlightPaint
       );
       
       // Border
-      final borderPaint = Paint()
-        ..color = color.withValues(alpha: 0.3)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5;
-      canvas.drawCircle(Offset(x, y), radius, borderPaint);
+      _borderPaint.color = color.withValues(alpha: 0.3);
+      canvas.drawCircle(Offset(x, y), radius, _borderPaint);
     }
 
     // Helper to draw a sparkle (diamond shape)
@@ -62,8 +62,8 @@ class CutePainter extends CustomPainter {
       path.quadraticBezierTo(x + 2 * scale, y + 2 * scale, x, y + 10 * scale); // Bottom
       path.quadraticBezierTo(x - 2 * scale, y + 2 * scale, x - 10 * scale, y); // Left
       path.close();
-      paint.color = color;
-      canvas.drawPath(path, paint);
+      _mainPaint.color = color;
+      canvas.drawPath(path, _mainPaint);
     }
 
     // Bubbles
@@ -84,19 +84,19 @@ class CutePainter extends CustomPainter {
 }
 
 class ManlyPainter extends CustomPainter {
+  static final Paint _fillPaint = Paint()
+    ..color = const Color(0xFF334155).withValues(alpha: 0.05)
+    ..style = PaintingStyle.fill;
+
+  static final Paint _strokePaint = Paint()
+    ..color = const Color(0xFF1E293B).withValues(alpha: 0.05)
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 2;
+
   const ManlyPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFF334155).withValues(alpha: 0.05)
-      ..style = PaintingStyle.fill;
-
-    final strokePaint = Paint()
-      ..color = const Color(0xFF1E293B).withValues(alpha: 0.05)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-
     // Draw a few large decorative hexagons
     void drawHexagon(double x, double y, double radius) {
       final path = Path();
@@ -109,8 +109,8 @@ class ManlyPainter extends CustomPainter {
       path.lineTo(x + radius * 0.866, y - radius * 0.5);
       path.close();
       
-      canvas.drawPath(path, paint);
-      canvas.drawPath(path, strokePaint);
+      canvas.drawPath(path, _fillPaint);
+      canvas.drawPath(path, _strokePaint);
     }
 
     drawHexagon(size.width * 0.1, size.height * 0.2, 80);
@@ -122,6 +122,25 @@ class ManlyPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class AppThemeScope extends InheritedWidget {
+  final AppTheme theme;
+
+  const AppThemeScope({
+    super.key,
+    required this.theme,
+    required super.child,
+  });
+
+  static AppTheme of(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<AppThemeScope>();
+    assert(scope != null, 'No AppThemeScope found in context');
+    return scope!.theme;
+  }
+
+  @override
+  bool updateShouldNotify(AppThemeScope oldWidget) => theme != oldWidget.theme;
 }
 
 class AppTheme {
@@ -151,21 +170,18 @@ class AppTheme {
     this.isCute = false,
   });
 
+  static final Map<String, AppTheme> _cache = {};
+
   static AppTheme getTheme(String role, {String? gender}) {
+    final key = '$role-${gender ?? ''}';
+    if (_cache.containsKey(key)) {
+      return _cache[key]!;
+    }
+
+    AppTheme theme;
     switch (role) {
-      case 'secretary':
-        return AppTheme(
-          primary: const Color(0xFFD4AF37), // Gold
-          secondary: const Color(0xFF000080), // Navy
-          tertiary: const Color(0xFF8B0000), // Dark Red
-          background: const Color(0xFFF9F9F0), // Soft Beige
-          surface: const Color(0xFFFFFFFF),
-          onSurface: const Color(0xFF1A1A1A),
-          fontFamily: 'Times New Roman', // Serif
-          isBrutalist: false,
-        );
       case 'admin':
-        return AppTheme(
+        theme = AppTheme(
           primary: const Color(0xFFCCFF00), // Acid Green
           secondary: const Color(0xFF7000FF), // Electric Purple
           tertiary: const Color(0xFFFF003C), // Cyber Red
@@ -176,11 +192,12 @@ class AppTheme {
           backgroundPainter: const GridPainter(),
           isBrutalist: true,
         );
+      case 'secretary':
       case 'user':
       default:
         if (gender == 'Perempuan') {
           // Cute / Soft Theme (Kawaii)
-          return AppTheme(
+          theme = AppTheme(
             primary: const Color(0xFFFF9AA2), // Pastel Pink (Strawberry)
             secondary: const Color(0xFFB5EAD7), // Pastel Mint
             tertiary: const Color(0xFFFFDAC1), // Pastel Peach
@@ -194,7 +211,7 @@ class AppTheme {
           );
         } else {
           // Default / Male (Manly / Slate Theme)
-          return AppTheme(
+          theme = AppTheme(
             primary: const Color(0xFF0F172A), // Slate 900 (Very Dark Blue)
             secondary: const Color(0xFF334155), // Slate 700
             tertiary: const Color(0xFF0EA5E9), // Sky 500 (Brighter Blue for contrast)
@@ -208,5 +225,8 @@ class AppTheme {
           );
         }
     }
+    
+    _cache[key] = theme;
+    return theme;
   }
 }

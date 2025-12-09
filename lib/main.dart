@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:namer_app/profile_screen.dart';
-import 'package:namer_app/admin_panel.dart';
 import 'package:namer_app/auth_manager.dart';
-import 'package:namer_app/schedule_screen.dart';
 import 'package:namer_app/events_screen.dart';
 import 'package:namer_app/theme/app_theme.dart';
 import 'package:namer_app/views/home_view.dart';
 import 'package:namer_app/views/tasks_view.dart';
+import 'package:namer_app/views/extra_view.dart';
 import 'package:namer_app/widgets/featured_card.dart';
 import 'package:namer_app/widgets/keep_alive_wrapper.dart';
 import 'package:namer_app/widgets/slide_indexed_stack.dart';
@@ -62,58 +61,67 @@ class ModernApp extends StatelessWidget {
         final auth = AuthManager();
         final appTheme = AppTheme.getTheme(auth.currentTheme, gender: auth.gender);
         
-        return MaterialApp(
-          title: 'School App',
-          debugShowCheckedModeBanner: false,
-          scrollBehavior: const MaterialScrollBehavior().copyWith(
-            physics: const BouncingScrollPhysics(),
-            dragDevices: {
-              PointerDeviceKind.mouse,
-              PointerDeviceKind.touch,
-              PointerDeviceKind.stylus,
-              PointerDeviceKind.trackpad,
+        return AppThemeScope(
+          theme: appTheme,
+          child: MaterialApp(
+            title: 'School App',
+            debugShowCheckedModeBanner: false,
+            builder: (context, child) {
+              return MediaQuery(
+                data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
+                child: child!,
+              );
             },
-          ),
-          themeMode: ThemeMode.dark,
-          darkTheme: ThemeData(
-            useMaterial3: true,
-            pageTransitionsTheme: const PageTransitionsTheme(
-              builders: {
-                TargetPlatform.android: ZoomPageTransitionsBuilder(),
-                TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+            scrollBehavior: const MaterialScrollBehavior().copyWith(
+              physics: const BouncingScrollPhysics(),
+              dragDevices: {
+                PointerDeviceKind.mouse,
+                PointerDeviceKind.touch,
+                PointerDeviceKind.stylus,
+                PointerDeviceKind.trackpad,
               },
             ),
-            colorScheme: ColorScheme.dark(
-              primary: appTheme.primary,
-              secondary: appTheme.secondary,
-              surface: appTheme.surface,
-              onSurface: appTheme.onSurface,
-              error: appTheme.tertiary,
-            ),
-            scaffoldBackgroundColor: appTheme.background,
-            cardColor: appTheme.surface,
-            appBarTheme: const AppBarTheme(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              centerTitle: false,
-            ),
-            textTheme: TextTheme(
-              headlineMedium: TextStyle(
-                fontFamily: appTheme.fontFamily,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -1.5,
-                color: appTheme.onSurface,
+            themeMode: ThemeMode.dark,
+            darkTheme: ThemeData(
+              useMaterial3: true,
+              pageTransitionsTheme: const PageTransitionsTheme(
+                builders: {
+                  TargetPlatform.android: ZoomPageTransitionsBuilder(),
+                  TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+                },
               ),
-              titleLarge: TextStyle(
-                fontFamily: appTheme.fontFamily,
-                fontWeight: FontWeight.bold,
-                color: appTheme.onSurface,
+              colorScheme: ColorScheme.dark(
+                primary: appTheme.primary,
+                secondary: appTheme.secondary,
+                surface: appTheme.surface,
+                onSurface: appTheme.onSurface,
+                error: appTheme.tertiary,
               ),
-              bodyLarge: TextStyle(color: appTheme.onSurface.withValues(alpha: 0.7), fontFamily: appTheme.fontFamily),
-              bodyMedium: TextStyle(color: appTheme.onSurface.withValues(alpha: 0.6), fontFamily: appTheme.fontFamily),
+              scaffoldBackgroundColor: appTheme.background,
+              cardColor: appTheme.surface,
+              appBarTheme: const AppBarTheme(
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                centerTitle: false,
+              ),
+              textTheme: TextTheme(
+                headlineMedium: TextStyle(
+                  fontFamily: appTheme.fontFamily,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -1.5,
+                  color: appTheme.onSurface,
+                ),
+                titleLarge: TextStyle(
+                  fontFamily: appTheme.fontFamily,
+                  fontWeight: FontWeight.bold,
+                  color: appTheme.onSurface,
+                ),
+                bodyLarge: TextStyle(color: appTheme.onSurface.withValues(alpha: 0.7), fontFamily: appTheme.fontFamily),
+                bodyMedium: TextStyle(color: appTheme.onSurface.withValues(alpha: 0.6), fontFamily: appTheme.fontFamily),
+              ),
             ),
+            home: const MainScreen(),
           ),
-          home: const MainScreen(),
         );
       },
     );
@@ -128,7 +136,7 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  int _selectedIndex = 0;
+  int _selectedIndex = 1;
 
   @override
   Widget build(BuildContext context) {
@@ -252,6 +260,7 @@ class _MainScreenState extends State<MainScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 24),
                           children: [
                             FeatureCard(
+                              theme: appTheme,
                               title: 'Jadwal Pintar',
                               desc: 'Sinkronisasi otomatis dengan kelasmu.',
                               icon: Icons.calendar_month_rounded,
@@ -259,6 +268,7 @@ class _MainScreenState extends State<MainScreen> {
                             ),
                             const SizedBox(width: 16),
                             FeatureCard(
+                              theme: appTheme,
                               title: 'Manajemen Tugas',
                               desc: 'Jangan pernah lewatkan deadline lagi.',
                               icon: Icons.check_circle_outline_rounded,
@@ -266,6 +276,7 @@ class _MainScreenState extends State<MainScreen> {
                             ),
                             const SizedBox(width: 16),
                             FeatureCard(
+                              theme: appTheme,
                               title: 'Notifikasi',
                               desc: 'Tetap update dengan pemberitahuan.',
                               icon: Icons.notifications_none_rounded,
@@ -327,15 +338,12 @@ class _MainScreenState extends State<MainScreen> {
         }
 
         final tabs = <Widget>[
+          const ProfileScreen(),
           const HomeView(),
-          const ScheduleView(),
           TasksView(canEdit: userRole == 'secretary'),
           const EventsView(),
+          const ExtraView(),
         ];
-
-        if (userRole == 'admin') {
-          tabs.add(const AdminPanel());
-        }
 
         // Ensure index is valid
         if (_selectedIndex >= tabs.length) {
@@ -368,14 +376,14 @@ class _MainScreenState extends State<MainScreen> {
               },
               destinations: [
                 NavigationDestination(
+                  icon: Icon(Icons.person_outline, color: appTheme.onSurface.withValues(alpha: 0.5)),
+                  selectedIcon: Icon(Icons.person, color: appTheme.onSurface),
+                  label: appTheme.isBrutalist ? 'AKUN' : 'Akun',
+                ),
+                NavigationDestination(
                   icon: Icon(Icons.home_outlined, color: appTheme.onSurface.withValues(alpha: 0.5)),
                   selectedIcon: Icon(Icons.home, color: appTheme.onSurface),
                   label: appTheme.isBrutalist ? 'BERANDA' : 'Beranda',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.calendar_today_outlined, color: appTheme.onSurface.withValues(alpha: 0.5)),
-                  selectedIcon: Icon(Icons.calendar_today, color: appTheme.onSurface),
-                  label: appTheme.isBrutalist ? 'JADWAL' : 'Jadwal',
                 ),
                 NavigationDestination(
                   icon: Icon(Icons.assignment_outlined, color: appTheme.onSurface.withValues(alpha: 0.5)),
@@ -387,12 +395,11 @@ class _MainScreenState extends State<MainScreen> {
                   selectedIcon: Icon(Icons.event_note, color: appTheme.onSurface),
                   label: appTheme.isBrutalist ? 'ACARA' : 'Acara',
                 ),
-                if (userRole == 'admin')
-                  NavigationDestination(
-                    icon: Icon(Icons.admin_panel_settings_outlined, color: appTheme.onSurface.withValues(alpha: 0.5)),
-                    selectedIcon: Icon(Icons.admin_panel_settings, color: appTheme.onSurface),
-                    label: appTheme.isBrutalist ? 'ADMIN' : 'Admin',
-                  ),
+                NavigationDestination(
+                  icon: Icon(Icons.widgets_outlined, color: appTheme.onSurface.withValues(alpha: 0.5)),
+                  selectedIcon: Icon(Icons.widgets, color: appTheme.onSurface),
+                  label: appTheme.isBrutalist ? 'EKSTRA' : 'Ekstra',
+                ),
               ],
             ),
           ),

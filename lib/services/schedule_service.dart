@@ -128,8 +128,31 @@ class ScheduleService {
     }
   }
 
-  static IconData getIconForSubject(String subject) {
-    switch (subject) {
+  static IconData getIconForSubject(String subject, {String? dbIcon}) {
+    // If DB has a specific icon string, we could map it here.
+    // For now, we rely on subject names, but we add support for SHOLAT and ISTIRAHAT explicitly.
+    
+    if (dbIcon != null && dbIcon.isNotEmpty) {
+      // Example mapping if we stored icon names in DB
+      switch (dbIcon) {
+        case 'mosque': return Icons.mosque;
+        case 'restaurant': return Icons.restaurant;
+        case 'school': return Icons.school;
+        // Add more mappings as needed
+      }
+    }
+
+    final normalizedSubject = subject.toUpperCase();
+    
+    if (normalizedSubject.contains('SHOLAT') || normalizedSubject.contains('PRAYER')) {
+      return Icons.mosque_outlined;
+    }
+    
+    if (normalizedSubject.contains('ISTIRAHAT') || normalizedSubject.contains('BREAK')) {
+      return Icons.restaurant_outlined;
+    }
+
+    switch (normalizedSubject) {
       case 'MATHEMATICS':
         return Icons.calculate_outlined;
       case 'PHYSICS':
@@ -152,8 +175,6 @@ class ScheduleService {
         return Icons.mosque_outlined;
       case 'ARTS':
         return Icons.palette_outlined;
-      case 'BREAK':
-        return Icons.restaurant_outlined;
       case 'CEREMONY':
         return Icons.flag_outlined;
       default:

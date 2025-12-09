@@ -14,19 +14,83 @@ class TasksView extends StatefulWidget {
 }
 
 class _TasksViewState extends State<TasksView> {
-  late Future<List<Map<String, dynamic>>> _future;
+  final ScrollController _scrollController = ScrollController();
+  List<Map<String, dynamic>> _tasks = [];
+  bool _isLoading = false;
+  bool _hasMore = true;
+  int _page = 0;
+  final int _pageSize = 20;
+  bool _isInitialLoad = true;
 
   @override
   void initState() {
     super.initState();
     _refreshTasks();
+    _scrollController.addListener(_onScroll);
   }
 
-  void _refreshTasks() {
-    _future = Supabase.instance.client
-        .from('tasks')
-        .select()
-        .order('created_at', ascending: false);
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      _loadMoreTasks();
+    }
+  }
+
+  Future<void> _refreshTasks() async {
+    setState(() {
+      _isLoading = true;
+      _tasks = [];
+      _page = 0;
+      _hasMore = true;
+      if (_tasks.isEmpty) _isInitialLoad = true;
+    });
+    await _loadMoreTasks();
+  }
+
+  Future<void> _loadMoreTasks() async {
+    if (!_hasMore && !_isInitialLoad) {
+        if (_isLoading) setState(() => _isLoading = false);
+        return;
+    }
+
+    try {
+      final from = _page * _pageSize;
+      final to = from + _pageSize - 1;
+      
+      final response = await Supabase.instance.client
+          .from('tasks')
+          .select('id, title, description, is_completed, created_at, deadline')
+          .order('is_completed', ascending: true)
+          .order('created_at', ascending: false)
+          .range(from, to);
+      
+      final newTasks = List<Map<String, dynamic>>.from(response);
+      
+      if (mounted) {
+        setState(() {
+          _tasks.addAll(newTasks);
+          _hasMore = newTasks.length == _pageSize;
+          _page++;
+          _isLoading = false;
+          _isInitialLoad = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _isInitialLoad = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading tasks: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _toggleTask(dynamic id, bool currentStatus) async {
@@ -38,9 +102,7 @@ class _TasksViewState extends State<TasksView> {
           .update({'is_completed': !currentStatus})
           .eq('id', id);
       
-      setState(() {
-        _refreshTasks();
-      });
+      _refreshTasks();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -60,159 +122,166 @@ class _TasksViewState extends State<TasksView> {
     await showDialog(
       context: parentContext,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (builderContext, setState) => Dialog(
-          backgroundColor: appTheme.surface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'TAMBAH TUGAS BARU',
-                  style: TextStyle(
-                    fontFamily: appTheme.fontFamily,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                    color: appTheme.onSurface,
+        builder: (builderContext, setState) {
+          Future<void> submit() async {
+            if (titleController.text.isEmpty) return;
+            
+            try {
+              await Supabase.instance.client.from('tasks').insert({
+                'title': titleController.text,
+                'description': descController.text,
+                'deadline': selectedDate?.toIso8601String(),
+                'is_completed': false,
+                'created_at': DateTime.now().toIso8601String(),
+              });
+              
+              if (parentContext.mounted) {
+                Navigator.pop(dialogContext);
+                _refreshTasks();
+                ScaffoldMessenger.of(parentContext).showSnackBar(
+                  SnackBar(
+                    content: Text('Tugas berhasil ditambahkan', style: TextStyle(fontFamily: appTheme.fontFamily)),
+                    backgroundColor: appTheme.primary,
                   ),
-                ),
-                const SizedBox(height: 24),
-                TextField(
-                  controller: titleController,
-                  style: TextStyle(color: appTheme.onSurface, fontFamily: appTheme.fontFamily),
-                  decoration: InputDecoration(
-                    labelText: 'JUDUL TUGAS',
-                    labelStyle: TextStyle(color: appTheme.onSurface.withValues(alpha: 0.6)),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: appTheme.onSurface.withValues(alpha: 0.2)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: appTheme.primary),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: descController,
-                  style: TextStyle(color: appTheme.onSurface, fontFamily: appTheme.fontFamily),
-                  maxLines: 3,
-                  decoration: InputDecoration(
-                    labelText: 'DESKRIPSI',
-                    labelStyle: TextStyle(color: appTheme.onSurface.withValues(alpha: 0.6)),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: appTheme.onSurface.withValues(alpha: 0.2)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: appTheme.primary),
+                );
+              }
+            } catch (e) {
+              if (parentContext.mounted) {
+                ScaffoldMessenger.of(parentContext).showSnackBar(
+                  SnackBar(content: Text('Error: $e')),
+                );
+              }
+            }
+          }
+
+          return Dialog(
+            backgroundColor: appTheme.surface,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'TAMBAH TUGAS BARU',
+                    style: TextStyle(
+                      fontFamily: appTheme.fontFamily,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: appTheme.onSurface,
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                InkWell(
-                  onTap: () async {
-                    final date = await showDatePicker(
-                      context: dialogContext,
-                      initialDate: DateTime.now(),
-                      firstDate: DateTime.now(),
-                      lastDate: DateTime.now().add(const Duration(days: 365)),
-                      builder: (context, child) {
-                        return Theme(
-                          data: Theme.of(context).copyWith(
-                            colorScheme: ColorScheme.dark(
-                              primary: appTheme.primary,
-                              onPrimary: appTheme.background,
-                              surface: appTheme.surface,
-                              onSurface: appTheme.onSurface,
+                  const SizedBox(height: 24),
+                  TextField(
+                    controller: titleController,
+                    textInputAction: TextInputAction.next,
+                    style: TextStyle(color: appTheme.onSurface, fontFamily: appTheme.fontFamily),
+                    decoration: InputDecoration(
+                      labelText: 'JUDUL TUGAS',
+                      labelStyle: TextStyle(color: appTheme.onSurface.withValues(alpha: 0.6)),
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: appTheme.onSurface.withValues(alpha: 0.2)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: appTheme.primary),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: descController,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => submit(),
+                    style: TextStyle(color: appTheme.onSurface, fontFamily: appTheme.fontFamily),
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      labelText: 'DESKRIPSI',
+                      labelStyle: TextStyle(color: appTheme.onSurface.withValues(alpha: 0.6)),
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: appTheme.onSurface.withValues(alpha: 0.2)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: appTheme.primary),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  InkWell(
+                    onTap: () async {
+                      final date = await showDatePicker(
+                        context: dialogContext,
+                        initialDate: DateTime.now(),
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                        builder: (context, child) {
+                          return Theme(
+                            data: Theme.of(context).copyWith(
+                              colorScheme: ColorScheme.dark(
+                                primary: appTheme.primary,
+                                onPrimary: appTheme.background,
+                                surface: appTheme.surface,
+                                onSurface: appTheme.onSurface,
+                              ),
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
+                      if (date != null) {
+                        setState(() => selectedDate = date);
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: appTheme.onSurface.withValues(alpha: 0.2)),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            selectedDate == null 
+                                ? 'PILIH TENGGAT WAKTU' 
+                                : DateHelper.formatToIndonesian(selectedDate!),
+                            style: TextStyle(
+                              color: appTheme.onSurface.withValues(alpha: selectedDate == null ? 0.6 : 1.0),
+                              fontFamily: appTheme.fontFamily,
                             ),
                           ),
-                          child: child!,
-                        );
-                      },
-                    );
-                    if (date != null) {
-                      setState(() => selectedDate = date);
-                    }
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: appTheme.onSurface.withValues(alpha: 0.2)),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          selectedDate == null 
-                              ? 'PILIH TENGGAT WAKTU' 
-                              : DateHelper.formatToIndonesian(selectedDate!),
-                          style: TextStyle(
-                            color: appTheme.onSurface.withValues(alpha: selectedDate == null ? 0.6 : 1.0),
-                            fontFamily: appTheme.fontFamily,
-                          ),
-                        ),
-                        Icon(Icons.calendar_today, color: appTheme.primary, size: 20),
-                      ],
+                          Icon(Icons.calendar_today, color: appTheme.primary, size: 20),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(dialogContext),
-                      child: Text(
-                        'BATAL',
-                        style: TextStyle(color: appTheme.onSurface.withValues(alpha: 0.6), fontFamily: appTheme.fontFamily),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialogContext),
+                        child: Text(
+                          'BATAL',
+                          style: TextStyle(color: appTheme.onSurface.withValues(alpha: 0.6), fontFamily: appTheme.fontFamily),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    ElevatedButton(
-                      onPressed: () async {
-                        if (titleController.text.isEmpty) return;
-                        
-                        try {
-                          await Supabase.instance.client.from('tasks').insert({
-                            'title': titleController.text,
-                            'description': descController.text,
-                            'deadline': selectedDate?.toIso8601String(),
-                            'is_completed': false,
-                            'created_at': DateTime.now().toIso8601String(),
-                          });
-                          
-                          if (parentContext.mounted) {
-                            Navigator.pop(dialogContext);
-                            _refreshTasks();
-                            ScaffoldMessenger.of(parentContext).showSnackBar(
-                              SnackBar(
-                                content: Text('Tugas berhasil ditambahkan', style: TextStyle(fontFamily: appTheme.fontFamily)),
-                                backgroundColor: appTheme.primary,
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          if (parentContext.mounted) {
-                            ScaffoldMessenger.of(parentContext).showSnackBar(
-                              SnackBar(content: Text('Error: $e')),
-                            );
-                          }
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: appTheme.primary,
-                        foregroundColor: appTheme.background,
+                      const SizedBox(width: 16),
+                      ElevatedButton(
+                        onPressed: submit,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: appTheme.primary,
+                          foregroundColor: appTheme.background,
+                        ),
+                        child: Text('SIMPAN', style: TextStyle(fontFamily: appTheme.fontFamily, fontWeight: FontWeight.bold)),
                       ),
-                      child: Text('SIMPAN', style: TextStyle(fontFamily: appTheme.fontFamily, fontWeight: FontWeight.bold)),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -287,11 +356,8 @@ class _TasksViewState extends State<TasksView> {
 
                 // Task List
                 Expanded(
-                  child: FutureBuilder<List<Map<String, dynamic>>>(
-                    future: _future,
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return Center(
+                  child: _isInitialLoad && _tasks.isEmpty
+                      ? Center(
                           child: Text(
                             'MEMUAT_DATA...',
                             style: TextStyle(
@@ -300,75 +366,66 @@ class _TasksViewState extends State<TasksView> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                        );
-                      }
-                      
-                      if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                        return Center(
-                          child: Container(
-                            padding: const EdgeInsets.all(32),
-                            decoration: BoxDecoration(
-                              border: appTheme.isBrutalist ? Border.all(color: appTheme.onSurface.withValues(alpha: 0.1)) : null,
-                              borderRadius: appTheme.isBrutalist ? null : BorderRadius.circular(24),
-                              color: appTheme.surface.withValues(alpha: 0.8),
-                              boxShadow: appTheme.isBrutalist ? null : [
-                                BoxShadow(
-                                  color: appTheme.primary.withValues(alpha: 0.1),
-                                  blurRadius: 20,
-                                  spreadRadius: 5,
+                        )
+                      : _tasks.isEmpty
+                          ? Center(
+                              child: Container(
+                                padding: const EdgeInsets.all(32),
+                                decoration: BoxDecoration(
+                                  border: appTheme.isBrutalist ? Border.all(color: appTheme.onSurface.withValues(alpha: 0.1)) : null,
+                                  borderRadius: appTheme.isBrutalist ? null : BorderRadius.circular(24),
+                                  color: appTheme.surface.withValues(alpha: 0.8),
+                                  boxShadow: appTheme.isBrutalist ? null : [
+                                    BoxShadow(
+                                      color: appTheme.primary.withValues(alpha: 0.1),
+                                      blurRadius: 20,
+                                      spreadRadius: 5,
+                                    ),
+                                  ],
                                 ),
-                              ],
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.folder_off_outlined, size: 48, color: appTheme.onSurface.withValues(alpha: 0.24)),
+                                    const SizedBox(height: 24),
+                                    Text(
+                                      'TUGAS_TIDAK_DITEMUKAN',
+                                      style: TextStyle(
+                                        color: appTheme.onSurface.withValues(alpha: 0.54),
+                                        fontSize: 16,
+                                        fontFamily: appTheme.fontFamily,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'SISTEM_IDLE',
+                                      style: TextStyle(
+                                        color: appTheme.onSurface.withValues(alpha: 0.24),
+                                        fontSize: 12,
+                                        fontFamily: appTheme.fontFamily,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          : ListView.builder(
+                              controller: _scrollController,
+                              padding: const EdgeInsets.symmetric(horizontal: 24),
+                              itemCount: _tasks.length + (_hasMore ? 1 : 0),
+                              itemBuilder: (context, index) {
+                                if (index == _tasks.length) {
+                                  return Center(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16.0),
+                                      child: CircularProgressIndicator(color: appTheme.primary),
+                                    ),
+                                  );
+                                }
+                                return _buildTaskItemWithHeader(index, appTheme);
+                              },
                             ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.folder_off_outlined, size: 48, color: appTheme.onSurface.withValues(alpha: 0.24)),
-                                const SizedBox(height: 24),
-                                Text(
-                                  'TUGAS_TIDAK_DITEMUKAN',
-                                  style: TextStyle(
-                                    color: appTheme.onSurface.withValues(alpha: 0.54),
-                                    fontSize: 16,
-                                    fontFamily: appTheme.fontFamily,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'SISTEM_IDLE',
-                                  style: TextStyle(
-                                    color: appTheme.onSurface.withValues(alpha: 0.24),
-                                    fontSize: 12,
-                                    fontFamily: appTheme.fontFamily,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }
-
-                      final tasks = snapshot.data!;
-                      final pendingTasks = tasks.where((t) => !(t['is_completed'] ?? false)).toList();
-                      final completedTasks = tasks.where((t) => (t['is_completed'] ?? false)).toList();
-
-                      return ListView(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        children: [
-                          if (pendingTasks.isNotEmpty) ...[
-                            _buildSectionHeader('MASIH BERJALAN', appTheme),
-                            ...pendingTasks.map((task) => _buildTaskItem(task, appTheme)),
-                            const SizedBox(height: 32),
-                          ],
-                          
-                          if (completedTasks.isNotEmpty) ...[
-                            _buildSectionHeader('SUDAH SELESAI', appTheme),
-                            ...completedTasks.map((task) => _buildTaskItem(task, appTheme)),
-                          ],
-                        ],
-                      );
-                    },
-                  ),
                 ),
               ],
             ),
@@ -377,6 +434,7 @@ class _TasksViewState extends State<TasksView> {
       ),
       floatingActionButton: widget.canEdit
           ? FloatingActionButton(
+              heroTag: 'tasks_fab',
               onPressed: _addTask,
               backgroundColor: appTheme.tertiary,
               foregroundColor: appTheme.isBrutalist ? Colors.black : Colors.white,
@@ -400,6 +458,28 @@ class _TasksViewState extends State<TasksView> {
           fontSize: 12,
         ),
       ),
+    );
+  }
+
+  Widget _buildTaskItemWithHeader(int index, AppTheme theme) {
+    final task = _tasks[index];
+    final isCompleted = task['is_completed'] ?? false;
+    final bool showPendingHeader = index == 0 && !isCompleted;
+    
+    // Show completed header if this is the first completed task
+    // This happens if it is completed AND (it's the first task OR the previous task was NOT completed)
+    final bool showCompletedHeader = isCompleted && (index == 0 || !(_tasks[index - 1]['is_completed'] ?? false));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (showPendingHeader) _buildSectionHeader('MASIH BERJALAN', theme),
+        if (showCompletedHeader) ...[
+           if (index > 0) const SizedBox(height: 32), // Spacer before completed section if not at top
+           _buildSectionHeader('SUDAH SELESAI', theme),
+        ],
+        _buildTaskItem(task, theme),
+      ],
     );
   }
 

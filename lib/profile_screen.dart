@@ -131,7 +131,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final theme = AppTheme.getTheme(auth.currentTheme, gender: auth.gender);
 
     return Scaffold(
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: true,
       backgroundColor: theme.background,
       body: MediaQuery.removeViewInsets(
         context: context,
@@ -150,41 +150,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: auth.isLoggedIn
                   ? _buildProfileView(context, auth, theme)
                   : _buildLoginView(context, theme),
-            ),
-            Positioned(
-              top: 0,
-              left: 0,
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: InkWell(
-                    onTap: () => Navigator.pop(context),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: theme.onSurface.withValues(alpha: 0.24)),
-                        borderRadius: theme.isBrutalist ? null : BorderRadius.circular(8),
-                        color: theme.surface,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.arrow_back, color: theme.onSurface, size: 16),
-                          const SizedBox(width: 8),
-                          Text(
-                            theme.isBrutalist ? 'KEMBALI' : 'Kembali',
-                            style: TextStyle(
-                              color: theme.onSurface,
-                              fontFamily: theme.fontFamily,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
             ),
           ],
         ),
@@ -374,32 +339,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ],
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-
-                Text(
-                  theme.isBrutalist ? 'LEVEL_AKSES' : 'Level Akses',
-                  style: TextStyle(
-                    color: theme.onSurface.withValues(alpha: 0.54),
-                    fontFamily: theme.fontFamily,
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  auth.role.toUpperCase(),
-                  style: TextStyle(
-                    color: auth.role == 'admin' ? theme.tertiary : theme.secondary,
-                    fontFamily: theme.fontFamily,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 20,
-                    letterSpacing: 1,
-                  ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ),
+        ),
           const Spacer(),
           SizedBox(
             width: double.infinity,
@@ -464,6 +408,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 48),
             TextField(
               controller: _usernameController,
+              textInputAction: TextInputAction.next,
               style: TextStyle(color: theme.onSurface, fontFamily: theme.fontFamily),
               decoration: InputDecoration(
                 labelText: theme.isBrutalist ? 'USERNAME' : 'Username',
@@ -485,6 +430,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             TextField(
               controller: _passwordController,
               obscureText: true,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _signIn(),
               style: TextStyle(color: theme.onSurface, fontFamily: theme.fontFamily),
               decoration: InputDecoration(
                 labelText: theme.isBrutalist ? 'PASSWORD' : 'Password',

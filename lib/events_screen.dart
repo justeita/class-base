@@ -5,6 +5,36 @@ import 'package:namer_app/auth_manager.dart';
 import 'package:namer_app/theme/app_theme.dart';
 import 'package:namer_app/utils/date_helper.dart';
 
+// Top-level function for compute
+Map<DateTime, List<dynamic>> _processEvents(List<Map<String, dynamic>> data) {
+  final Map<DateTime, List<dynamic>> events = {};
+
+  for (var item in data) {
+    final startDateStr = item['event_date'] as String;
+    final endDateStr = item['end_date'] as String?;
+    
+    final startDate = DateTime.parse(startDateStr);
+    final endDate = endDateStr != null ? DateTime.parse(endDateStr) : startDate;
+
+    // Normalize to UTC midnight
+    final startMidnight = DateTime.utc(startDate.year, startDate.month, startDate.day);
+    final endMidnight = DateTime.utc(endDate.year, endDate.month, endDate.day);
+
+    DateTime currentDate = startMidnight;
+    
+    // Loop through each day in the range
+    while (!currentDate.isAfter(endMidnight)) {
+      if (events[currentDate] == null) {
+        events[currentDate] = [];
+      }
+      events[currentDate]!.add(item);
+      
+      currentDate = currentDate.add(const Duration(days: 1));
+    }
+  }
+  return events;
+}
+
 class EventsView extends StatefulWidget {
   const EventsView({super.key});
 
@@ -30,23 +60,13 @@ class _EventsViewState extends State<EventsView> {
       // Fetch all events ordered by date
       final response = await Supabase.instance.client
           .from('events')
-          .select()
+          .select('id, title, description, event_date, end_date, event_type')
           .order('event_date', ascending: true);
 
       final data = List<Map<String, dynamic>>.from(response);
-      final Map<DateTime, List<dynamic>> events = {};
-
-      for (var item in data) {
-        final dateStr = item['event_date'] as String;
-        final date = DateTime.parse(dateStr);
-        // Normalize to UTC midnight to match TableCalendar's day
-        final key = DateTime.utc(date.year, date.month, date.day);
-
-        if (events[key] == null) {
-          events[key] = [];
-        }
-        events[key]!.add(item);
-      }
+      
+      // Process events directly (compute removed to fix loading issue)
+      final events = _processEvents(data);
 
       if (mounted) {
         setState(() {
@@ -59,195 +79,12 @@ class _EventsViewState extends State<EventsView> {
   }
 
   Future<void> _addEvent() async {
-    final titleController = TextEditingController();
-    final descController = TextEditingController();
-    final typeController = TextEditingController(text: 'UMUM');
-    DateTime? selectedDate = _selectedDay ?? DateTime.now();
     final auth = AuthManager();
     final theme = AppTheme.getTheme(auth.currentTheme, gender: auth.gender);
-    final parentContext = context; // Capture parent context
-
+    
     await showDialog(
-      context: parentContext,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (builderContext, setState) => Dialog(
-          backgroundColor: theme.surface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  theme.isBrutalist ? 'TAMBAH EVENT BARU' : 'Tambah Event Baru',
-                  style: TextStyle(
-                    fontFamily: theme.fontFamily,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                    color: theme.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                TextField(
-                  controller: titleController,
-                  style: TextStyle(color: theme.onSurface, fontFamily: theme.fontFamily),
-                  decoration: InputDecoration(
-                    labelText: theme.isBrutalist ? 'JUDUL EVENT' : 'Judul Event',
-                    labelStyle: TextStyle(color: theme.onSurface.withValues(alpha: 0.6)),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: theme.onSurface.withValues(alpha: 0.2)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: theme.secondary),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: descController,
-                  style: TextStyle(color: theme.onSurface, fontFamily: theme.fontFamily),
-                  maxLines: 3,
-                  decoration: InputDecoration(
-                    labelText: theme.isBrutalist ? 'DESKRIPSI' : 'Deskripsi',
-                    labelStyle: TextStyle(color: theme.onSurface.withValues(alpha: 0.6)),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: theme.onSurface.withValues(alpha: 0.2)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: theme.secondary),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                InputDecorator(
-                  decoration: InputDecoration(
-                    labelText: theme.isBrutalist ? 'TIPE EVENT' : 'Tipe Event',
-                    labelStyle: TextStyle(color: theme.onSurface.withValues(alpha: 0.6)),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: theme.onSurface.withValues(alpha: 0.2)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: theme.secondary),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: typeController.text,
-                      dropdownColor: theme.surface,
-                      style: TextStyle(color: theme.onSurface, fontFamily: theme.fontFamily),
-                      isExpanded: true,
-                      items: ['UMUM', 'LIBUR', 'UJIAN', 'RAPAT', 'LAINNYA']
-                          .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                          .toList(),
-                      onChanged: (val) => setState(() => typeController.text = val!),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                InkWell(
-                  onTap: () async {
-                    final date = await showDatePicker(
-                      context: dialogContext,
-                      initialDate: selectedDate!,
-                      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                      lastDate: DateTime.now().add(const Duration(days: 365)),
-                      builder: (context, child) {
-                        return Theme(
-                          data: Theme.of(context).copyWith(
-                            colorScheme: ColorScheme.dark(
-                              primary: theme.secondary,
-                              onPrimary: theme.background,
-                              surface: theme.surface,
-                              onSurface: theme.onSurface,
-                            ),
-                          ),
-                          child: child!,
-                        );
-                      },
-                    );
-                    if (date != null) {
-                      setState(() => selectedDate = date);
-                    }
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: theme.onSurface.withValues(alpha: 0.2)),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          DateHelper.formatToIndonesian(selectedDate!),
-                          style: TextStyle(
-                            color: theme.onSurface,
-                            fontFamily: theme.fontFamily,
-                          ),
-                        ),
-                        Icon(Icons.calendar_today, color: theme.secondary, size: 20),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(dialogContext),
-                      child: Text(
-                        theme.isBrutalist ? 'BATAL' : 'Batal',
-                        style: TextStyle(color: theme.onSurface.withValues(alpha: 0.6), fontFamily: theme.fontFamily),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    ElevatedButton(
-                      onPressed: () async {
-                        if (titleController.text.isEmpty) return;
-                        
-                        try {
-                          await Supabase.instance.client.from('events').insert({
-                            'title': titleController.text,
-                            'description': descController.text,
-                            'event_date': selectedDate!.toIso8601String(),
-                            'event_type': typeController.text,
-                            'created_at': DateTime.now().toIso8601String(),
-                          });
-                          
-                          if (parentContext.mounted) {
-                            Navigator.pop(dialogContext);
-                            _loadAllEvents();
-                            ScaffoldMessenger.of(parentContext).showSnackBar(
-                              SnackBar(
-                                content: Text('Event berhasil ditambahkan', style: TextStyle(fontFamily: theme.fontFamily)),
-                                backgroundColor: theme.secondary,
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          if (parentContext.mounted) {
-                            ScaffoldMessenger.of(parentContext).showSnackBar(
-                              SnackBar(content: Text('Error: $e')),
-                            );
-                          }
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.secondary,
-                        foregroundColor: theme.background,
-                      ),
-                      child: Text(theme.isBrutalist ? 'SIMPAN' : 'Simpan', style: TextStyle(fontFamily: theme.fontFamily, fontWeight: FontWeight.bold)),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      context: context,
+      builder: (context) => EventStepperDialog(theme: theme, onSave: _loadAllEvents),
     );
   }
 
@@ -550,6 +387,7 @@ class _EventsViewState extends State<EventsView> {
                               (_selectedDay ?? DateTime.now()).month,
                               (_selectedDay ?? DateTime.now()).day,
                             )] ?? [],
+                            theme: theme,
                           ),
                         ),
                       ],
@@ -564,6 +402,7 @@ class _EventsViewState extends State<EventsView> {
       ),
       floatingActionButton: (auth.role == 'secretary' || auth.role == 'admin')
           ? FloatingActionButton(
+              heroTag: 'events_fab',
               onPressed: _addEvent,
               backgroundColor: theme.secondary,
               foregroundColor: theme.isBrutalist ? Colors.black : Colors.white,
@@ -578,143 +417,550 @@ class _EventsViewState extends State<EventsView> {
 class EventDetailsPanel extends StatelessWidget {
   final DateTime selectedDay;
   final List<dynamic> events;
+  final AppTheme theme;
 
   const EventDetailsPanel({
     super.key, 
     required this.selectedDay,
     required this.events,
+    required this.theme,
   });
 
   @override
   Widget build(BuildContext context) {
-    final auth = AuthManager();
-    final theme = AppTheme.getTheme(auth.currentTheme, gender: auth.gender);
     final dateStr = DateHelper.formatToIndonesian(selectedDay);
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
         color: theme.surface,
         borderRadius: theme.isBrutalist 
             ? null 
-            : BorderRadius.circular(theme.isCute ? 32 : (theme.isManly ? 8 : 24)),
-        border: theme.isBrutalist 
-            ? Border.all(color: theme.onSurface.withValues(alpha: 0.1)) 
-            : (theme.isManly ? Border.all(color: theme.primary.withValues(alpha: 0.3)) : null),
-        boxShadow: theme.isBrutalist ? null : [
-          BoxShadow(
-            color: theme.isCute 
-                ? theme.primary.withValues(alpha: 0.1) 
-                : (theme.isManly 
-                    ? theme.primary.withValues(alpha: 0.15) 
-                    : Colors.black.withValues(alpha: 0.05)),
-            blurRadius: theme.isCute ? 20 : (theme.isManly ? 4 : 20),
-            offset: theme.isManly ? const Offset(4, 4) : const Offset(0, 10),
-          ),
-        ],
+            : BorderRadius.circular(24),
+        border: Border.all(color: theme.onSurface.withValues(alpha: 0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            theme.isBrutalist ? 'TANGGAL_TERPILIH' : 'Tanggal Terpilih',
-            style: TextStyle(
-              color: theme.secondary,
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-              fontFamily: theme.fontFamily,
-              letterSpacing: 1,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                dateStr.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: theme.onSurface,
+                  fontFamily: theme.fontFamily,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: theme.secondary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '${events.length} EVENT',
+                  style: TextStyle(
+                    color: theme.secondary,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: theme.fontFamily,
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            dateStr.toUpperCase(),
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-              color: theme.onSurface,
-              fontFamily: theme.fontFamily,
-              letterSpacing: -0.5,
-            ),
-          ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           Expanded(
             child: events.isEmpty
                 ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.event_busy_outlined, size: 48, color: theme.onSurface.withValues(alpha: 0.2)),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Tidak ada event ditemukan',
-                          style: TextStyle(
-                            color: theme.onSurface.withValues(alpha: 0.5),
-                            fontFamily: theme.fontFamily,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      'Tidak ada event',
+                      style: TextStyle(
+                        color: theme.onSurface.withValues(alpha: 0.4),
+                        fontFamily: theme.fontFamily,
+                        fontSize: 12,
+                      ),
                     ),
                   )
-                : ListView.builder(
+                : ListView.separated(
                     itemCount: events.length,
+                    separatorBuilder: (context, index) => Divider(color: theme.onSurface.withValues(alpha: 0.05)),
                     itemBuilder: (context, index) {
                       final event = events[index];
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: theme.background,
-                          border: Border(left: BorderSide(color: theme.secondary, width: 4)),
-                        ),
-                        child: Column(
+                      return InkWell(
+                        onTap: () => _showEventDetail(context, event, theme),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                          child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  event['event_type'] ?? 'UMUM',
-                                  style: TextStyle(
-                                    color: theme.secondary,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    fontFamily: theme.fontFamily,
-                                  ),
-                                ),
-                                Icon(Icons.more_horiz, size: 16, color: theme.onSurface.withValues(alpha: 0.3)),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              event['title'] ?? 'Event Tanpa Judul',
-                              style: TextStyle(
-                                color: theme.onSurface,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: theme.fontFamily,
+                            Container(
+                              width: 4,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: theme.secondary,
+                                borderRadius: BorderRadius.circular(2),
                               ),
                             ),
-                            if (event['description'] != null) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                event['description'],
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    event['title'] ?? 'Event',
+                                    style: TextStyle(
+                                      color: theme.onSurface,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      fontFamily: theme.fontFamily,
+                                    ),
+                                  ),
+                                  if (event['description'] != null && event['description'].isNotEmpty)
+                                    Text(
+                                      event['description'],
+                                      style: TextStyle(
+                                        color: theme.onSurface.withValues(alpha: 0.6),
+                                        fontSize: 11,
+                                        fontFamily: theme.fontFamily,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: theme.onSurface.withValues(alpha: 0.2)),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                event['event_type'] ?? 'UMUM',
                                 style: TextStyle(
+                                  fontSize: 9,
                                   color: theme.onSurface.withValues(alpha: 0.6),
-                                  fontSize: 12,
                                   fontFamily: theme.fontFamily,
                                 ),
                               ),
-                            ],
+                            ),
                           ],
                         ),
-                      );
+                      ),
+                    );
                     },
                   ),
           ),
         ],
       ),
     );
+  }
+
+  void _showEventDetail(BuildContext context, Map<String, dynamic> event, AppTheme theme) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: theme.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      (event['title'] ?? 'EVENT').toString().toUpperCase(),
+                      style: TextStyle(
+                        fontFamily: theme.fontFamily,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        color: theme.onSurface,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close, color: theme.onSurface),
+                    onPressed: () => Navigator.pop(context),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: theme.secondary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  event['event_type'] ?? 'UMUM',
+                  style: TextStyle(
+                    color: theme.secondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: theme.fontFamily,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                event['description'] ?? 'Tidak ada deskripsi',
+                style: TextStyle(
+                  color: theme.onSurface.withValues(alpha: 0.8),
+                  fontFamily: theme.fontFamily,
+                  fontSize: 14,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Icon(Icons.calendar_today, size: 16, color: theme.onSurface.withValues(alpha: 0.5)),
+                  const SizedBox(width: 8),
+                  Text(
+                    DateHelper.formatToIndonesian(DateTime.parse(event['event_date'])),
+                    style: TextStyle(
+                      color: theme.onSurface.withValues(alpha: 0.6),
+                      fontFamily: theme.fontFamily,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class EventStepperDialog extends StatefulWidget {
+  final AppTheme theme;
+  final VoidCallback onSave;
+
+  const EventStepperDialog({super.key, required this.theme, required this.onSave});
+
+  @override
+  State<EventStepperDialog> createState() => _EventStepperDialogState();
+}
+
+class _EventStepperDialogState extends State<EventStepperDialog> {
+  int _currentStep = 0;
+  final _titleController = TextEditingController();
+  final _descController = TextEditingController();
+  String _eventType = 'UMUM';
+  DateTimeRange? _selectedDateRange;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _selectedDateRange = DateTimeRange(start: now, end: now);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: widget.theme.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        width: 400,
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.theme.isBrutalist ? 'TAMBAH EVENT BARU' : 'Tambah Event Baru',
+              style: TextStyle(
+                fontFamily: widget.theme.fontFamily,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                color: widget.theme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // Stepper Content
+            Flexible(
+              child: _buildStepContent(),
+            ),
+            
+            const SizedBox(height: 24),
+            
+            // Navigation Buttons
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (_currentStep > 0)
+                  TextButton(
+                    onPressed: () => setState(() => _currentStep--),
+                    child: Text(
+                      'KEMBALI',
+                      style: TextStyle(color: widget.theme.onSurface.withValues(alpha: 0.6), fontFamily: widget.theme.fontFamily),
+                    ),
+                  )
+                else
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(
+                      'BATAL',
+                      style: TextStyle(color: widget.theme.onSurface.withValues(alpha: 0.6), fontFamily: widget.theme.fontFamily),
+                    ),
+                  ),
+                  
+                ElevatedButton(
+                  onPressed: _handleNext,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: widget.theme.secondary,
+                    foregroundColor: widget.theme.background,
+                  ),
+                  child: Text(
+                    _currentStep == 2 ? (widget.theme.isBrutalist ? 'SIMPAN' : 'Simpan') : 'LANJUT',
+                    style: TextStyle(fontFamily: widget.theme.fontFamily, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStepContent() {
+    switch (_currentStep) {
+      case 0:
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _titleController,
+              textInputAction: TextInputAction.next,
+              style: TextStyle(color: widget.theme.onSurface, fontFamily: widget.theme.fontFamily),
+              decoration: InputDecoration(
+                labelText: widget.theme.isBrutalist ? 'JUDUL EVENT' : 'Judul Event',
+                labelStyle: TextStyle(color: widget.theme.onSurface.withValues(alpha: 0.6)),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: widget.theme.onSurface.withValues(alpha: 0.2)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: widget.theme.secondary),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _descController,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _handleNext(),
+              style: TextStyle(color: widget.theme.onSurface, fontFamily: widget.theme.fontFamily),
+              maxLines: 3,
+              decoration: InputDecoration(
+                labelText: widget.theme.isBrutalist ? 'DESKRIPSI' : 'Deskripsi',
+                labelStyle: TextStyle(color: widget.theme.onSurface.withValues(alpha: 0.6)),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: widget.theme.onSurface.withValues(alpha: 0.2)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: widget.theme.secondary),
+                ),
+              ),
+            ),
+          ],
+        );
+      case 1:
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Pilih Tipe Event',
+              style: TextStyle(color: widget.theme.onSurface, fontFamily: widget.theme.fontFamily),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: ['UMUM', 'LIBUR', 'UJIAN', 'RAPAT', 'LAINNYA'].map((type) {
+                final isSelected = _eventType == type;
+                return ChoiceChip(
+                  label: Text(type),
+                  selected: isSelected,
+                  onSelected: (selected) {
+                    if (selected) setState(() => _eventType = type);
+                  },
+                  selectedColor: widget.theme.secondary,
+                  labelStyle: TextStyle(
+                    color: isSelected ? widget.theme.background : widget.theme.onSurface,
+                    fontFamily: widget.theme.fontFamily,
+                  ),
+                  backgroundColor: widget.theme.surface,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    side: BorderSide(color: widget.theme.onSurface.withValues(alpha: 0.2)),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        );
+      case 2:
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Pilih Tanggal & Durasi',
+              style: TextStyle(color: widget.theme.onSurface, fontFamily: widget.theme.fontFamily),
+            ),
+            const SizedBox(height: 16),
+            InkWell(
+              onTap: () async {
+                final picked = await showDateRangePicker(
+                  context: context,
+                  firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                  initialDateRange: _selectedDateRange,
+                  builder: (context, child) {
+                    return Theme(
+                      data: Theme.of(context).copyWith(
+                        colorScheme: ColorScheme.dark(
+                          primary: widget.theme.secondary,
+                          onPrimary: widget.theme.background,
+                          surface: widget.theme.surface,
+                          onSurface: widget.theme.onSurface,
+                        ),
+                      ),
+                      child: child!,
+                    );
+                  },
+                );
+                if (picked != null) {
+                  setState(() => _selectedDateRange = picked);
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  border: Border.all(color: widget.theme.onSurface.withValues(alpha: 0.2)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'DARI',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: widget.theme.onSurface.withValues(alpha: 0.5),
+                              fontFamily: widget.theme.fontFamily,
+                            ),
+                          ),
+                          Text(
+                            DateHelper.formatToIndonesian(_selectedDateRange!.start),
+                            style: TextStyle(
+                              color: widget.theme.onSurface,
+                              fontFamily: widget.theme.fontFamily,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                      child: Icon(Icons.arrow_forward, color: widget.theme.secondary),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            'SAMPAI',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: widget.theme.onSurface.withValues(alpha: 0.5),
+                              fontFamily: widget.theme.fontFamily,
+                            ),
+                          ),
+                          Text(
+                            DateHelper.formatToIndonesian(_selectedDateRange!.end),
+                            style: TextStyle(
+                              color: widget.theme.onSurface,
+                              fontFamily: widget.theme.fontFamily,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Future<void> _handleNext() async {
+    if (_currentStep == 0) {
+      if (_titleController.text.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Judul tidak boleh kosong')),
+        );
+        return;
+      }
+      setState(() => _currentStep++);
+    } else if (_currentStep == 1) {
+      setState(() => _currentStep++);
+    } else {
+      // Save
+      try {
+        await Supabase.instance.client.from('events').insert({
+          'title': _titleController.text,
+          'description': _descController.text,
+          'event_date': _selectedDateRange!.start.toIso8601String(),
+          'end_date': _selectedDateRange!.end.toIso8601String(),
+          'event_type': _eventType,
+          'created_at': DateTime.now().toIso8601String(),
+        });
+        
+        if (mounted) {
+          Navigator.pop(context);
+          widget.onSave();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Event berhasil ditambahkan', style: TextStyle(fontFamily: widget.theme.fontFamily)),
+              backgroundColor: widget.theme.secondary,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e')),
+          );
+        }
+      }
+    }
   }
 }

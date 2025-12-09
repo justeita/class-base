@@ -16,9 +16,19 @@ class NotificationService {
   Future<void> init() async {
     try {
       tz.initializeTimeZones();
-      final timeZoneName = await flutter_timezone.FlutterTimezone.getLocalTimezone();
+      final timeZoneNameObj = await flutter_timezone.FlutterTimezone.getLocalTimezone();
+      String timeZoneName = timeZoneNameObj.toString();
+      
+      // Fix for Linux/some platforms returning complex string like "TimezoneInfo(Asia/Jakarta, ...)"
+      if (timeZoneName.startsWith('TimezoneInfo(')) {
+        final parts = timeZoneName.split(',');
+        if (parts.isNotEmpty) {
+          timeZoneName = parts[0].replaceAll('TimezoneInfo(', '').trim();
+        }
+      }
+
       try {
-        tz.setLocalLocation(tz.getLocation(timeZoneName.toString()));
+        tz.setLocalLocation(tz.getLocation(timeZoneName));
       } catch (e) {
         debugPrint("Error setting local location: $e. Fallback to UTC.");
         tz.setLocalLocation(tz.getLocation('UTC'));
@@ -28,7 +38,7 @@ class NotificationService {
           AndroidInitializationSettings('@mipmap/ic_launcher');
 
       final DarwinInitializationSettings initializationSettingsDarwin =
-          DarwinInitializationSettings(
+          const DarwinInitializationSettings(
         requestAlertPermission: true,
         requestBadgePermission: true,
         requestSoundPermission: true,
@@ -47,10 +57,14 @@ class NotificationService {
       );
       
       // Request permissions for Android 13+
-      await flutterLocalNotificationsPlugin
+      final androidImplementation = flutterLocalNotificationsPlugin
           .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.requestNotificationsPermission();
+              AndroidFlutterLocalNotificationsPlugin>();
+              
+      if (androidImplementation != null) {
+        await androidImplementation.requestNotificationsPermission();
+        await androidImplementation.requestExactAlarmsPermission();
+      }
     } catch (e) {
       debugPrint("Error initializing NotificationService: $e");
     }

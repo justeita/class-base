@@ -20,7 +20,92 @@ class _AdminPanelState extends State<AdminPanel> {
   
   String _selectedRole = 'user';
   String _selectedGender = 'Pria';
+  bool _isSubmitting = false;
+  
+  // Pagination state
+  final ScrollController _scrollController = ScrollController();
+  List<Map<String, dynamic>> _users = [];
   bool _isLoading = false;
+  bool _hasMore = true;
+  int _page = 0;
+  final int _pageSize = 20;
+  bool _isInitialLoad = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshUsers();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _usernameController.dispose();
+    _passwordController.dispose();
+    _fullNameController.dispose();
+    _absentNumberController.dispose();
+    _classNameController.dispose();
+    _dobController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      _loadMoreUsers();
+    }
+  }
+
+  Future<void> _refreshUsers() async {
+    setState(() {
+      _isLoading = true;
+      _users = [];
+      _page = 0;
+      _hasMore = true;
+      if (_users.isEmpty) _isInitialLoad = true;
+    });
+    await _loadMoreUsers();
+  }
+
+  Future<void> _loadMoreUsers() async {
+    if (!_hasMore && !_isInitialLoad) {
+        if (_isLoading) setState(() => _isLoading = false);
+        return;
+    }
+
+    try {
+      final from = _page * _pageSize;
+      final to = from + _pageSize - 1;
+
+      final response = await Supabase.instance.client
+          .from('app_users')
+          .select('id, username, role, created_at')
+          .order('created_at')
+          .range(from, to);
+      
+      final newUsers = List<Map<String, dynamic>>.from(response);
+
+      if (mounted) {
+        setState(() {
+          _users.addAll(newUsers);
+          _hasMore = newUsers.length == _pageSize;
+          _page++;
+          _isLoading = false;
+          _isInitialLoad = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _isInitialLoad = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('ERROR: $e', style: const TextStyle(fontFamily: 'Courier')), backgroundColor: const Color(0xFFFF003C)),
+        );
+      }
+    }
+  }
 
   Future<void> _addUser() async {
     if (_usernameController.text.isEmpty || _passwordController.text.isEmpty) {
@@ -34,7 +119,7 @@ class _AdminPanelState extends State<AdminPanel> {
     }
 
     setState(() {
-      _isLoading = true;
+      _isSubmitting = true;
     });
 
     try {
@@ -61,7 +146,7 @@ class _AdminPanelState extends State<AdminPanel> {
           ),
         );
         Navigator.pop(context); // Tutup dialog
-        setState(() {}); // Refresh list
+        _refreshUsers(); // Refresh list
       }
     } catch (e) {
       if (mounted) {
@@ -72,7 +157,7 @@ class _AdminPanelState extends State<AdminPanel> {
     } finally {
       if (mounted) {
         setState(() {
-          _isLoading = false;
+          _isSubmitting = false;
         });
       }
     }
@@ -326,14 +411,14 @@ class _AdminPanelState extends State<AdminPanel> {
                     ),
                     const SizedBox(width: 16),
                     ElevatedButton(
-                      onPressed: _isLoading ? null : _addUser,
+                      onPressed: _isSubmitting ? null : _addUser,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFCCFF00),
                         foregroundColor: Colors.black,
                         shape: const BeveledRectangleBorder(),
                         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                       ),
-                      child: _isLoading
+                      child: _isSubmitting
                           ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
                           : const Text('EKSEKUSI', style: TextStyle(fontFamily: 'Courier', fontWeight: FontWeight.bold)),
                     ),
@@ -385,7 +470,7 @@ class _AdminPanelState extends State<AdminPanel> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          Positioned.fill(
+          const Positioned.fill(
             child: CustomPaint(
               painter: GridPainter(),
             ),
@@ -472,101 +557,96 @@ class _AdminPanelState extends State<AdminPanel> {
 
                 // User List
                 Expanded(
-                  child: FutureBuilder<List<Map<String, dynamic>>>(
-                    future: Supabase.instance.client.from('app_users').select().order('created_at'),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(
+                  child: _isInitialLoad && _users.isEmpty
+                      ? const Center(
                           child: Text(
                             'MENGAMBIL_DATA...',
                             style: TextStyle(color: Color(0xFFCCFF00), fontFamily: 'Courier'),
                           ),
-                        );
-                      }
+                        )
+                      : _users.isEmpty
+                          ? const Center(child: Text('TIDAK_ADA_USER', style: TextStyle(color: Colors.white54, fontFamily: 'Courier')))
+                          : ListView.builder(
+                              controller: _scrollController,
+                              padding: const EdgeInsets.symmetric(horizontal: 24),
+                              itemCount: _users.length + (_hasMore ? 1 : 0),
+                              itemBuilder: (context, index) {
+                                if (index == _users.length) {
+                                  return const Center(
+                                    child: Padding(
+                                      padding: EdgeInsets.all(16.0),
+                                      child: CircularProgressIndicator(color: Color(0xFFCCFF00)),
+                                    ),
+                                  );
+                                }
+                                
+                                final user = _users[index];
+                                final role = user['role'] as String;
+                                Color roleColor;
+                                switch (role) {
+                                  case 'admin':
+                                    roleColor = const Color(0xFFFF003C);
+                                  case 'secretary':
+                                    roleColor = const Color(0xFFCCFF00);
+                                  default:
+                                    roleColor = const Color(0xFF00F0FF);
+                                }
 
-                      if (snapshot.hasError) {
-                        return Center(child: Text('ERROR: ${snapshot.error}', style: const TextStyle(color: Colors.red, fontFamily: 'Courier')));
-                      }
-
-                      final users = snapshot.data ?? [];
-
-                      if (users.isEmpty) {
-                        return const Center(child: Text('TIDAK_ADA_USER', style: TextStyle(color: Colors.white54, fontFamily: 'Courier')));
-                      }
-
-                      return ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        itemCount: users.length,
-                        itemBuilder: (context, index) {
-                          final user = users[index];
-                          final role = user['role'] as String;
-                          Color roleColor;
-                          switch (role) {
-                            case 'admin':
-                              roleColor = const Color(0xFFFF003C);
-                            case 'secretary':
-                              roleColor = const Color(0xFFCCFF00);
-                            default:
-                              roleColor = const Color(0xFF00F0FF);
-                          }
-
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 16),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1E1E1E),
-                              border: Border(
-                                left: BorderSide(color: roleColor, width: 4),
-                              ),
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 16),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF1E1E1E),
+                                    border: Border(
+                                      left: BorderSide(color: roleColor, width: 4),
+                                    ),
+                                  ),
+                                  child: ListTile(
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                    title: Text(
+                                      user['username'] ?? 'UNKNOWN',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontFamily: 'Courier',
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      'AKSES: ${role.toUpperCase()}',
+                                      style: TextStyle(
+                                        color: roleColor,
+                                        fontFamily: 'Courier',
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    trailing: IconButton(
+                                      icon: const Icon(Icons.delete_outline, color: Colors.white24),
+                                      onPressed: () async {
+                                        try {
+                                          await Supabase.instance.client.from('app_users').delete().eq('id', user['id']);
+                                          if (context.mounted) {
+                                            _refreshUsers();
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                content: Text('USER_DIHAPUS', style: TextStyle(fontFamily: 'Courier', color: Colors.black)),
+                                                backgroundColor: Color(0xFFCCFF00),
+                                              ),
+                                            );
+                                          }
+                                        } catch (e) {
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text('GAGAL: $e', style: const TextStyle(fontFamily: 'Courier')), backgroundColor: const Color(0xFFFF003C)),
+                                            );
+                                          }
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
-                            child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              title: Text(
-                                user['username'] ?? 'UNKNOWN',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontFamily: 'Courier',
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                              subtitle: Text(
-                                'AKSES: ${role.toUpperCase()}',
-                                style: TextStyle(
-                                  color: roleColor,
-                                  fontFamily: 'Courier',
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.delete_outline, color: Colors.white24),
-                                onPressed: () async {
-                                  try {
-                                    await Supabase.instance.client.from('app_users').delete().eq('id', user['id']);
-                                    if (context.mounted) {
-                                      setState(() {});
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('USER_DIHAPUS', style: TextStyle(fontFamily: 'Courier', color: Colors.black)),
-                                          backgroundColor: Color(0xFFCCFF00),
-                                        ),
-                                      );
-                                    }
-                                  } catch (e) {
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('GAGAL: $e', style: const TextStyle(fontFamily: 'Courier')), backgroundColor: const Color(0xFFFF003C)),
-                                      );
-                                    }
-                                  }
-                                },
-                              ),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
                 ),
               ],
             ),

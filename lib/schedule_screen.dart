@@ -14,7 +14,7 @@ class ScheduleView extends StatefulWidget {
 class _ScheduleViewState extends State<ScheduleView> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final List<String> _days = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'];
-  Future<List<Map<String, dynamic>>>? _weekScheduleFuture;
+  Future<Map<String, List<Map<String, dynamic>>>>? _processedScheduleFuture;
 
   @override
   void initState() {
@@ -24,7 +24,30 @@ class _ScheduleViewState extends State<ScheduleView> with SingleTickerProviderSt
       initialIndex = 0;
     }
     _tabController = TabController(length: _days.length, vsync: this, initialIndex: initialIndex);
-    _weekScheduleFuture = ScheduleService.fetchAllSchedules();
+    _loadSchedule();
+  }
+
+  void _loadSchedule() {
+    _processedScheduleFuture = ScheduleService.fetchAllSchedules().then((allSchedules) {
+      final Map<String, List<Map<String, dynamic>>> result = {};
+      final now = DateTime.now();
+      
+      for (var day in _days) {
+        final targetWeekday = _days.indexOf(day) + 1;
+        final currentWeekday = now.weekday;
+        final difference = targetWeekday - currentWeekday;
+        final targetDate = now.add(Duration(days: difference));
+        
+        result[day] = ScheduleService.filterSchedule(allSchedules, day, targetDate.day);
+      }
+      return result;
+    });
+  }
+
+  void _refreshSchedule() {
+    setState(() {
+      _loadSchedule();
+    });
   }
 
   @override
@@ -42,12 +65,12 @@ class _ScheduleViewState extends State<ScheduleView> with SingleTickerProviderSt
     String weekType = 'ALL';
     final auth = AuthManager();
     final theme = AppTheme.getTheme(auth.currentTheme, gender: auth.gender);
-    final parentContext = context; // Capture parent context
+    final parentContext = context;
 
     await showDialog(
       context: parentContext,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (builderContext, setState) => Dialog(
+        builder: (builderContext, setDialogState) => Dialog(
           backgroundColor: theme.surface,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           child: SingleChildScrollView(
@@ -86,7 +109,7 @@ class _ScheduleViewState extends State<ScheduleView> with SingleTickerProviderSt
                         style: TextStyle(color: theme.onSurface, fontFamily: theme.fontFamily),
                         isExpanded: true,
                         items: _days.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                        onChanged: (val) => setState(() => selectedDay = val!),
+                        onChanged: (val) => setDialogState(() => selectedDay = val!),
                       ),
                     ),
                   ),
@@ -112,13 +135,14 @@ class _ScheduleViewState extends State<ScheduleView> with SingleTickerProviderSt
                         items: ['MATHEMATICS', 'PHYSICS', 'CHEMISTRY', 'BIOLOGY', 'SPORTS', 'INDONESIAN', 'ENGLISH', 'HISTORY', 'CIVICS', 'RELIGION', 'ARTS', 'BREAK']
                             .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                             .toList(),
-                        onChanged: (val) => setState(() => subjectController.text = val!),
+                        onChanged: (val) => setDialogState(() => subjectController.text = val!),
                       ),
                     ),
                   ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: teacherController,
+                    textInputAction: TextInputAction.done,
                     style: TextStyle(color: theme.onSurface, fontFamily: theme.fontFamily),
                     decoration: InputDecoration(
                       labelText: 'GURU / PENGAJAR',
@@ -239,7 +263,7 @@ class _ScheduleViewState extends State<ScheduleView> with SingleTickerProviderSt
                         items: ['ALL', 'ODD', 'EVEN']
                             .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                             .toList(),
-                        onChanged: (val) => setState(() => weekType = val!),
+                        onChanged: (val) => setDialogState(() => weekType = val!),
                       ),
                     ),
                   ),
@@ -271,45 +295,7 @@ class _ScheduleViewState extends State<ScheduleView> with SingleTickerProviderSt
                             
                             if (parentContext.mounted) {
                               Navigator.pop(dialogContext);
-                              // We need to call setState on the parent widget to refresh the schedule
-                              // But we are in a static method or a method of State class?
-                              // We are in _ScheduleViewState.
-                              // So we can call setState of _ScheduleViewState.
-                              // But we are inside an async function, so we need to be careful.
-                              // We can just update the future.
-                              // Wait, we can't call setState of the parent widget directly if we are not in the widget tree?
-                              // We are in _addSchedule which is a method of _ScheduleViewState.
-                              // So `this.setState` refers to _ScheduleViewState's setState.
-                              // But we are inside `showDialog`'s async gap.
-                              // So we should use `this.setState` if `mounted` is true.
-                              // But `setState` inside `StatefulBuilder` shadows `this.setState`.
-                              // So we need to use `this.setState` explicitly or just call a method that calls `setState`.
-                              // I will use a helper method or just access the future variable directly if I can.
-                              // Actually, I can just assign the future and call setState on the parent context?
-                              // No, I am in the State class.
-                              // I will use `this.setState` (implied) but I need to make sure I am not using the shadowed `setState`.
-                              // The shadowed `setState` is the second argument of `StatefulBuilder`.
-                              // I named it `setState` in the builder.
-                              // So `setState` refers to the builder's setState.
-                              // To access the parent's setState, I can't easily do it if the name is shadowed.
-                              // I should rename the builder's setState to `setDialogState`.
-                              
-                              // Wait, I already renamed it in my previous thought but maybe not in the code I wrote?
-                              // In the code I wrote above: `builder: (builderContext, setState) => Dialog(`
-                              // Yes, I shadowed it.
-                              // I should rename it to `setDialogState`.
-                              
-                              // However, I can just update the future variable and then call `setState`?
-                              // But `setState` is shadowed.
-                              // I can use `_ScheduleViewState.this.setState`? No.
-                              // I will rename the inner setState.
-                              
-                              // Actually, I can just call `_refreshSchedule()` method if I create one.
-                              // Or I can just do:
-                              // _weekScheduleFuture = ScheduleData.fetchAllSchedules();
-                              // (parentContext as Element).markNeedsBuild(); // No, that's hacky.
-                              
-                              // Let's rename the inner setState.
+                              _refreshSchedule();
                             }
                           } catch (e) {
                             if (parentContext.mounted) {
@@ -342,7 +328,10 @@ class _ScheduleViewState extends State<ScheduleView> with SingleTickerProviderSt
     final theme = AppTheme.getTheme(auth.currentTheme, gender: auth.gender);
     
     // Ensure future is initialized (handles hot reload case)
-    _weekScheduleFuture ??= ScheduleService.fetchAllSchedules();
+    _processedScheduleFuture ??= Future.value({}); // Temporary fallback or re-trigger load? 
+    // Better to check if it's null and call _loadSchedule, but _loadSchedule sets it.
+    // If it's null here, it means initState didn't run or something cleared it.
+    if (_processedScheduleFuture == null) _loadSchedule();
     
     return Scaffold(
       backgroundColor: theme.background,
@@ -364,37 +353,40 @@ class _ScheduleViewState extends State<ScheduleView> with SingleTickerProviderSt
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (theme.isBrutalist) ...[
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              color: theme.primary,
-                              child: Text(
-                                'JADWAL_SISTEM',
-                                style: TextStyle(
-                                  color: Colors.black,
-                                  fontWeight: FontWeight.bold,
-                                  fontFamily: theme.fontFamily,
-                                  fontSize: 12,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (theme.isBrutalist) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                color: theme.primary,
+                                child: Text(
+                                  'JADWAL_SISTEM',
+                                  style: TextStyle(
+                                    color: Colors.black,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: theme.fontFamily,
+                                    fontSize: 12,
+                                  ),
                                 ),
                               ),
+                              const SizedBox(height: 8),
+                            ],
+                            Text(
+                              theme.isBrutalist ? 'JADWAL_KELAS' : 'Jadwal Pelajaran',
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w900,
+                                color: theme.onSurface,
+                                fontFamily: theme.fontFamily,
+                                letterSpacing: theme.isBrutalist ? -1 : 0,
+                              ),
                             ),
-                            const SizedBox(height: 8),
                           ],
-                          Text(
-                            theme.isBrutalist ? 'JADWAL_KELAS' : 'Jadwal Pelajaran',
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w900,
-                              color: theme.onSurface,
-                              fontFamily: theme.fontFamily,
-                              letterSpacing: theme.isBrutalist ? -1 : 0,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
+                      const SizedBox(width: 16),
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -445,21 +437,25 @@ class _ScheduleViewState extends State<ScheduleView> with SingleTickerProviderSt
 
                 // Content
                 Expanded(
-                  child: FutureBuilder<List<Map<String, dynamic>>>(
-                    future: _weekScheduleFuture,
+                  child: FutureBuilder<Map<String, List<Map<String, dynamic>>>>(
+                    future: _processedScheduleFuture,
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return Center(child: CircularProgressIndicator(color: theme.primary));
                       }
                       
-                      final allSchedules = snapshot.data ?? [];
+                      final schedulesMap = snapshot.data ?? {};
                       
                       return TabBarView(
                         controller: _tabController,
                         children: _days.map((day) {
+                          final schedule = schedulesMap[day] ?? [];
+                          final now = DateTime.now();
+                          final isToday = (now.weekday == (_days.indexOf(day) + 1));
+
                           return DayScheduleList(
-                            day: day,
-                            allSchedules: allSchedules,
+                            schedule: schedule,
+                            isToday: isToday,
                           );
                         }).toList(),
                       );
@@ -473,6 +469,7 @@ class _ScheduleViewState extends State<ScheduleView> with SingleTickerProviderSt
       ),
       floatingActionButton: (auth.role == 'secretary' || auth.role == 'admin')
           ? FloatingActionButton(
+              heroTag: 'schedule_fab',
               onPressed: _addSchedule,
               backgroundColor: theme.primary,
               foregroundColor: theme.isBrutalist ? Colors.black : Colors.white,
@@ -485,32 +482,19 @@ class _ScheduleViewState extends State<ScheduleView> with SingleTickerProviderSt
 }
 
 class DayScheduleList extends StatelessWidget {
-  final String day;
-  final List<Map<String, dynamic>> allSchedules;
+  final List<Map<String, dynamic>> schedule;
+  final bool isToday;
 
   const DayScheduleList({
     super.key, 
-    required this.day,
-    required this.allSchedules,
+    required this.schedule,
+    required this.isToday,
   });
 
   @override
   Widget build(BuildContext context) {
     final auth = AuthManager();
     final theme = AppTheme.getTheme(auth.currentTheme, gender: auth.gender);
-
-    // Calculate the date for this specific day in the current week
-    final now = DateTime.now();
-    final days = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'];
-    final targetWeekday = days.indexOf(day) + 1; // Monday is 1
-    final currentWeekday = now.weekday;
-    final difference = targetWeekday - currentWeekday;
-    final targetDate = now.add(Duration(days: difference));
-
-    final schedule = ScheduleService.filterSchedule(allSchedules, day, targetDate.day);
-
-    // Check if this list is for today
-    final isToday = targetDate.year == now.year && targetDate.month == now.month && targetDate.day == now.day;
 
     if (schedule.isEmpty) {
       return Center(
@@ -573,8 +557,9 @@ class DayScheduleList extends StatelessWidget {
           scheduleItem: item,
           isLast: isLast,
           color: ScheduleService.getColorForSubject(item['subject'].toString(), theme),
-          icon: ScheduleService.getIconForSubject(item['subject'].toString()),
+          icon: ScheduleService.getIconForSubject(item['subject'].toString(), dbIcon: item['icon']),
           isActive: isActive,
+          theme: theme,
         );
       },
     );
@@ -600,6 +585,7 @@ class TimelineItem extends StatelessWidget {
   final Color color;
   final IconData icon;
   final bool isActive;
+  final AppTheme theme;
 
   const TimelineItem({
     super.key,
@@ -607,20 +593,25 @@ class TimelineItem extends StatelessWidget {
     required this.isLast,
     required this.color,
     required this.icon,
+    required this.theme,
     this.isActive = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final auth = AuthManager();
-    final theme = AppTheme.getTheme(auth.currentTheme, gender: auth.gender);
     final startTime = scheduleItem['start_time'] as String;
     final endTime = scheduleItem['end_time'] as String;
     final heroTag = 'schedule_${scheduleItem['id'] ?? scheduleItem.hashCode}';
     final teacherName = scheduleItem['teacher']?.toString() ?? '';
     final hasTeacher = teacherName.isNotEmpty && teacherName != '-';
 
-    return IntrinsicHeight(
+    return CustomPaint(
+      painter: TimelinePainter(
+        color: color,
+        isLast: isLast,
+        hasTeacher: hasTeacher,
+        theme: theme,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -651,33 +642,7 @@ class TimelineItem extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 20),
-          // Timeline Line
-          Column(
-            children: [
-              Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: theme.background,
-                  border: Border.all(
-                    color: hasTeacher ? color : theme.onSurface.withValues(alpha: 0.3),
-                    width: 2,
-                  ),
-                  borderRadius: theme.isBrutalist ? null : BorderRadius.circular(6),
-                ),
-              ),
-              if (!isLast)
-                Expanded(
-                  child: Container(
-                    width: 2,
-                    margin: const EdgeInsets.symmetric(vertical: 4),
-                    color: hasTeacher ? color.withValues(alpha: 0.3) : theme.onSurface.withValues(alpha: 0.1),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(width: 20),
+          const SizedBox(width: 52), // 20 + 12 + 20
           // Content Card
           Expanded(
             child: Padding(
@@ -766,12 +731,16 @@ class TimelineItem extends StatelessWidget {
                                           color: theme.onSurface.withValues(alpha: 0.54),
                                         ),
                                         const SizedBox(width: 4),
-                                        Text(
-                                          teacherName,
-                                          style: TextStyle(
-                                            color: theme.onSurface.withValues(alpha: 0.54),
-                                            fontSize: 12,
-                                            fontFamily: theme.fontFamily,
+                                        Expanded(
+                                          child: Text(
+                                            teacherName,
+                                            style: TextStyle(
+                                              color: theme.onSurface.withValues(alpha: 0.54),
+                                              fontSize: 12,
+                                              fontFamily: theme.fontFamily,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
                                           ),
                                         ),
                                       ],
@@ -803,5 +772,65 @@ class TimelineItem extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class TimelinePainter extends CustomPainter {
+  final Color color;
+  final bool isLast;
+  final bool hasTeacher;
+  final AppTheme theme;
+
+  // Reusable paints
+  late final Paint _linePaint;
+  late final Paint _dotPaint;
+  late final Paint _borderPaint;
+
+  TimelinePainter({
+    required this.color,
+    required this.isLast,
+    required this.hasTeacher,
+    required this.theme,
+  }) {
+    _linePaint = Paint()
+      ..color = hasTeacher ? color.withValues(alpha: 0.3) : theme.onSurface.withValues(alpha: 0.1)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+
+    _dotPaint = Paint()
+      ..color = theme.background
+      ..style = PaintingStyle.fill;
+
+    _borderPaint = Paint()
+      ..color = hasTeacher ? color : theme.onSurface.withValues(alpha: 0.3)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double dotX = 60 + 20 + 6; // 86
+    final double dotY = 6;
+
+    // Draw Line
+    if (!isLast) {
+      canvas.drawLine(
+        Offset(dotX, dotY + 6 + 4), // Start 4px below dot
+        Offset(dotX, size.height - 4), // End 4px from bottom
+        _linePaint,
+      );
+    }
+
+    // Draw Dot
+    canvas.drawCircle(Offset(dotX, dotY), 6, _dotPaint); // Fill
+    canvas.drawCircle(Offset(dotX, dotY), 5, _borderPaint); // Border
+  }
+
+  @override
+  bool shouldRepaint(covariant TimelinePainter oldDelegate) {
+    return oldDelegate.color != color ||
+           oldDelegate.isLast != isLast ||
+           oldDelegate.hasTeacher != hasTeacher ||
+           oldDelegate.theme != theme;
   }
 }
